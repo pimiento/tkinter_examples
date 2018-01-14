@@ -1,5 +1,6 @@
 # coding: utf-8
 import utils
+import exceptions
 import configurations as conf
 from tkinter import (
     Tk, Menu, Canvas, Frame, Label, messagebox, PhotoImage
@@ -8,8 +9,8 @@ from tkinter import (
 
 class View(object):
 
-    board_color_1 = conf.BOARD_COLOR_1
-    board_color_2 = conf.BOARD_COLOR_2
+    all_squares_to_be_highlighted = []
+    selected_piece_position = None
 
     def __init__(self, controller):
         self.controller = controller
@@ -31,7 +32,6 @@ class View(object):
     def create_top_menu(self):
         self.menu_bar = Menu(self.parent)
         self.create_file_menu()
-        self.create_edit_menu()
         self.create_about_menu()
 
     def __add_menu(self, label, cascade=None):
@@ -50,21 +50,13 @@ class View(object):
             "File", [("New Game", self.on_new_game_menu_clicked)]
         )
 
-    def create_edit_menu(self):
-        self.__add_menu(
-            "Edit", [("Preferences", self.on_preference_menu_clicked)]
-        )
-
     def create_about_menu(self):
         self.__add_menu(
             "About", [("About", self.on_about_menu_clicked)]
         )
 
     def on_new_game_menu_clicked(self):
-        pass
-
-    def on_preference_menu_clicked(self):
-        pass
+        self.start_new_game()
 
     def on_about_menu_clicked(self):
         messagebox.showinfo("More information",
@@ -86,9 +78,15 @@ class View(object):
                 x1, y1 = utils.get_x_y_coordinate(row, col)
                 x2 = x1 + conf.DIMENSION_OF_EACH_SQUARE
                 y2 = y1 + conf.DIMENSION_OF_EACH_SQUARE
-                self.canvas.create_rectangle(
-                    x1, y1, x2, y2, fill=current_color
-                )
+                if self.all_squares_to_be_highlighted and\
+                   (row, col) in self.all_squares_to_be_highlighted:
+                    self.canvas.create_rectangle(
+                        x1, y1, x2, y2, fill=conf.HIGHLIGHT_COLOR
+                    )
+                else:
+                    self.canvas.create_rectangle(
+                        x1, y1, x2, y2, fill=current_color
+                    )
                 current_color = utils.get_alternate_color(current_color)
 
     def create_bottom_frame(self):
@@ -103,7 +101,46 @@ class View(object):
     def on_square_clicked(self, event):
         clicked_column = event.x // conf.DIMENSION_OF_EACH_SQUARE
         clicked_row = 7 - (event.y // conf.DIMENSION_OF_EACH_SQUARE)
-        print("Hey you clicked on %d×%d" % (clicked_row, clicked_column))
+        position_of_click = utils.get_alphanumeric_position(
+            (clicked_row, clicked_column)
+        )
+        if self.selected_piece_position:  # on second click
+            self.shift(self.selected_piece_position, position_of_click)
+            self.selected_piece_position = None
+        self.update_highlight_list(position_of_click)
+        self.draw_board()
+        self.draw_all_pieces()
+
+    def shift(self, start_pos, end_pos):
+        selected_piece = self.controller.get_piece_at(start_pos)
+        piece_at_destination = self.controller.get_piece_at(end_pos)
+        if not piece_at_destination or \
+           piece_at_destination.color != selected_piece.color:
+            try:
+                self.controller.pre_move_validation(start_pos, end_pos)
+            except exceptions.ChessError as error:
+                self.info_label["text"] = error.__class__.__name__
+            else:
+                self.update_label(selected_piece, start_pos, end_pos)
+
+    def update_label(self, piece, start_pos, end_pos):
+        enemy = utils.get_enemy(piece.color)
+        self.info_label["text"] = "{} : {}{}  {}\'s turn".format(
+            piece.color.capitalize(), start_pos, end_pos, enemy.capitalize()
+        )
+
+    def update_highlight_list(self, pos):
+        self.all_squares_to_be_highlighted = None
+        try:
+            piece = self.controller.get_piece_at(pos)
+        except:
+            piece = None
+        if piece and (piece.color == self.controller.player_turn()):
+            self.selected_piece_position = pos
+            self.all_squares_to_be_highlighted = [
+                utils.get_numeric_notation(piece) for piece in
+                self.controller.get_piece_at(pos).moves_available(pos)
+            ]
 
     def draw_single_piece(self, position, piece):
         x, y = utils.get_numeric_notation(position)
