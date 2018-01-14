@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+import view
+import controller
+
+
+PROGRAM_NAME = " Chess "
+
+
+if __name__ == "__main__":
+    controller = controller.Controller()
+    view.View(controller).mainloop()
